@@ -2,6 +2,7 @@
 ## Instructions (tested in Ubuntu 24.04 WSL)
 ### Prerequisites
 1. java 17: `sudo apt install openjdk-17-jre-headless`
+2. python 3.12.3: `sudo apt install python3`
 ### How to run
 1. `sudo apt install docker.io docker-compose -y`
 2. `sudo usermod -aG docker $USER`
