@@ -1,7 +1,8 @@
 # VUT FIT - PDI 25/26
-## Prerequisites
+## Instructions (tested in Ubuntu 24.04 WSL)
+### Prerequisites
 1. java 17: `sudo apt install openjdk-17-jre-headless`
-## How to run
+### How to run
 1. `sudo apt install docker.io docker-compose -y`
 2. `sudo usermod -aG docker $USER`
 3. `newgrp docker`
