@@ -1,0 +1,9 @@
+certifi==2025.11.12
+charset-normalizer==3.4.4
+idna==3.11
+kafka-python==2.3.0
+py4j==0.10.9.9
+pyspark==4.0.1
+requests==2.32.5
+sseclient-py==1.8.0
+urllib3==2.5.0
