@@ -13,7 +13,7 @@ producer = KafkaProducer(
 print("Connected to Kafka")
 
 headers = {
-    'User-Agent': 'Kafka SSE Client/1.0 (your-email@example.com)'
+    'User-Agent': 'Kafka SSE Client/1.0'
 }
 
 def connect_and_stream():
