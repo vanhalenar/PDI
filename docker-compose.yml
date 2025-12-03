@@ -1,10 +1,9 @@
 version: '3.8'
 
 services:
-  # Kafka broker
+  # kafka broker
   kafka:
     image: confluentinc/cp-kafka:7.7.7
-    #image: apache/kafka:latest
     container_name: kafka
     healthcheck:
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9092"]
@@ -29,7 +28,7 @@ services:
     networks:
       - spark-network
 
-  # SSE to Kafka producer
+  # kafka producer
   sse-producer:
     build:
       context: .
@@ -43,6 +42,7 @@ services:
     networks:
       - spark-network
 
+  # spark consumer
   consumer:
     build:
       context: .
@@ -61,35 +61,3 @@ services:
 networks:
   spark-network:
     driver: bridge
-  # Spark standalone
-  #spark:
-  #  build:
-  #    context: .
-  #    dockerfile: Dockerfile.spark
-  #  container_name: spark
-  #  ports:
-  #    - "8080:8080"  # Spark UI
-  #    - "4040:4040"  # Application UI
-  #  depends_on:
-  #    kafka:
-  #      condition: service_healthy
-  #  environment:
-  #    SPARK_MODE: standalone
-  #    KAFKA_SERVERS: kafka:9092
-  #  volumes:
-  #    - ./pyspark_consumer.py:/app/pyspark_consumer.py
-  #    - ./output:/app/output
-  #  networks:
-  #    - spark-network
-  #  command: >
-  #    bash -c "
-  #    sleep 10 &&
-  #    spark-submit
-  #    --master local[*]
-  #    --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1
-  #    /app/pyspark_consumer.py
-  #    --kafka-servers kafka:9092
-  #    --output-path /app/output
-  #    --duration 300
-  #    -s -a
-  #    "
