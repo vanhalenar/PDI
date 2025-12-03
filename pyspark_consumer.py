@@ -1,3 +1,4 @@
+import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, window
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, BooleanType, LongType, TimestampType
@@ -63,6 +64,7 @@ def edits_per_minute(df):
     return query
 
 def main():
+    time.sleep(10)
     parser = argparse.ArgumentParser(
                         prog='pyspark_consumer',
                         description='Apache Spark structured streaming project',)
@@ -105,11 +107,13 @@ def main():
         StructField("server_name", StringType(), True),
         StructField("wiki", StringType(), True)
     ])
+    
+    kafka_servers = os.environ.get('KAFKA_SERVERS', 'localhost:9092')
 
     df = spark \
         .readStream \
         .format("kafka") \
-        .option("kafka.bootstrap.servers", "localhost:9092") \
+        .option("kafka.bootstrap.servers", kafka_servers) \
         .option("subscribe", "sse-topic") \
         .option("startingOffsets", "earliest") \
         .load()
