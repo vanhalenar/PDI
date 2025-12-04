@@ -1,0 +1,11 @@
+FROM apache/spark:4.0.1-scala2.13-java17-python3-r-ubuntu
+#FROM apache/spark:4.1.0-preview4-scala2.13-java21-python3-r-ubuntu
+
+WORKDIR /app
+
+COPY pyspark_consumer.py /app/pyspark_consumer.py
+
+USER root
+RUN pip install pyspark
+
+CMD ["python3", "/app/pyspark_consumer.py", "--capture-all"]

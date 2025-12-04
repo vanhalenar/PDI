@@ -1,0 +1,12 @@
+FROM python:3.14.1-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    requests \
+    sseclient-py \
+    kafka-python
+
+COPY sse_to_kafka.py .
+
+CMD ["python", "sse_to_kafka.py"]

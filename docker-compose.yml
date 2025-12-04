@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # kafka broker
+  kafka:
+    image: confluentinc/cp-kafka:7.7.7
+    container_name: kafka
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9092"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "abcdefghijklmnopqrstuv"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "9092:9092"
+    networks:
+      - spark-network
+
+  # kafka producer
+  sse-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: sse-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_SERVERS: kafka:9092
+    networks:
+      - spark-network
+
+  # spark consumer
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: pyspark_consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_SERVERS: kafka:9092
+    volumes:
+      - ./consumer_output:/app/output
+    networks:
+      - spark-network
+
+networks:
+  spark-network:
+    driver: bridge

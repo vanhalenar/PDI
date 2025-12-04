@@ -3,14 +3,21 @@ import requests
 from kafka import KafkaProducer
 import json
 import time
+import os
 
 print("Starting Wikimedia SSE to Kafka producer...")
 
+kafka_servers = os.environ.get('KAFKA_SERVERS', 'localhost:9092')
+
 producer = KafkaProducer(
-    bootstrap_servers=['localhost:9092'],
+    bootstrap_servers=[kafka_servers],
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 print("Connected to Kafka")
+
+producer.send('sse-topic', {'test': 'hello world'})
+producer.flush()
+print("Test message sent")
 
 headers = {
     'User-Agent': 'Kafka SSE Client/1.0'
@@ -22,25 +29,25 @@ def connect_and_stream():
         'https://stream.wikimedia.org/v2/stream/recentchange',
         stream=True,
         headers=headers,
-        timeout=60  # Add timeout
+        timeout=60
     )
     print(f"Connected to Wikimedia stream, status: {response.status_code}")
     
     client = sseclient.SSEClient(response)
     print("SSE client created, starting to read events...")
     
-    event_count = 0
+    event_cnt=0
     for event in client.events():
         if event.data:
             producer.send('sse-topic', {
                 'data': event.data,
                 'event_type': event.event if event.event else 'message'
             })
-            event_count += 1
-            #if event_count % 10 == 0:
-            #    print(f"Sent {event_count} events to Kafka")
+            event_cnt+=1
+            if event_cnt % 10:
+                print("sent!")
 
-# Main loop with reconnection
+# main loop with reconnection
 while True:
     try:
         connect_and_stream()
