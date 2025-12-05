@@ -33,7 +33,7 @@ def capture_all(df):
     return query
 
 def edits_per_minute(df):
-    """Sliding window query. Find edits per minute on wikipedia servers, excluding bots."""
+    """Tumbling window query. Find edits per minute on wikipedia servers, excluding bots."""
     df_with_time = df.withColumn(
         "event_time", 
         (col("timestamp")).cast(TimestampType())
@@ -71,9 +71,12 @@ def main():
     parser.add_argument('-s', '--server-counts', action='store_true')
     parser.add_argument('-a', '--capture-all', action='store_true')
     parser.add_argument('-e', '--edits-per-minute', action='store_true')
+
+    parser.add_argument('-l', '--limit', type=int)
     args = parser.parse_args()
 
     spark = SparkSession.builder.appName("SSEKafka").config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
     kafka_schema = StructType([
         StructField("data", StringType(), True),
@@ -136,10 +139,14 @@ def main():
         queries.append(capture_all(parsed_wikimedia))
     if args.edits_per_minute:
         queries.append(edits_per_minute(parsed_wikimedia))
-        
-    time.sleep(60)
-    for query in queries:
-        query.stop()
+    
+    if args.limit:
+        time.sleep(60)
+        for query in queries:
+            query.stop()
+    else:
+        for query in queries:
+            query.awaitTermination()
 
 if __name__ == '__main__':
     main()

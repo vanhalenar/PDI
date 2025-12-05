@@ -15,10 +15,6 @@ producer = KafkaProducer(
 )
 print("Connected to Kafka")
 
-producer.send('sse-topic', {'test': 'hello world'})
-producer.flush()
-print("Test message sent")
-
 headers = {
     'User-Agent': 'Kafka SSE Client/1.0'
 }
@@ -36,16 +32,12 @@ def connect_and_stream():
     client = sseclient.SSEClient(response)
     print("SSE client created, starting to read events...")
     
-    event_cnt=0
     for event in client.events():
         if event.data:
             producer.send('sse-topic', {
                 'data': event.data,
                 'event_type': event.event if event.event else 'message'
             })
-            event_cnt+=1
-            if event_cnt % 10:
-                print("sent!")
 
 # main loop with reconnection
 while True:
