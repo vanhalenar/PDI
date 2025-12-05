@@ -1,6 +1,8 @@
+from html import parser
 import os
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, window
+from pyspark.sql.window import Window
+from pyspark.sql.functions import from_json, col, window, row_number
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, BooleanType, LongType, TimestampType
 import argparse
 import time
@@ -63,6 +65,78 @@ def edits_per_minute(df):
     
     return query
 
+def edits_by_type(df):
+    """Groups changes by type (edit, new, log, etc.)."""
+    df_filtered = df.filter(col("bot") == False)
+    counts = df_filtered.groupBy("type").count().orderBy(col("count").desc())
+
+    def write_batch(batch_df, batch_id):
+        if not batch_df.isEmpty():
+            batch_df.coalesce(1).write.mode("overwrite").json("output/edits_by_type")
+
+    query = counts.writeStream \
+        .outputMode("complete") \
+        .foreachBatch(write_batch) \
+        .start()
+    
+    return query
+
+def user_counts_per_minute(df):
+    """Counts user activities per minute, excluding bots and null users."""
+    df_with_time = df.filter((col("bot") == False) & (col("user").isNotNull())) \
+                     .withColumn("event_time", col("timestamp").cast(TimestampType()))
+    
+    windowed = df_with_time.withWatermark("event_time", "1 minute") \
+                            .groupBy(window(col("event_time"), "1 minute"), col("user")) \
+                            .count() \
+                            .withColumnRenamed("count", "activity_count") \
+                            .select(
+                                col("window.start").alias("window_start"),
+                                col("window.end").alias("window_end"),
+                                "user",
+                                "activity_count"
+                            )
+
+    def write_batch(batch_df, batch_id):
+        if not batch_df.isEmpty():
+            batch_df_sorted = batch_df.orderBy(col("user_count").desc())
+            batch_df_sorted.coalesce(1).write.mode("append").json("output/user_counts")
+    
+    query = windowed.writeStream \
+                    .outputMode("update") \
+                    .foreachBatch(write_batch) \
+                    .start()
+    
+    return query
+
+def avg_edit_length_change(df):
+    """Calculates average edit length change over sliding windows."""
+    df_edits = df.filter((col("type") == "edit") & (col("length").isNotNull()))
+    df_edits = df_edits.withColumn("delta_length", col("length.new") - col("length.old"))
+    df_with_time = df_edits.withColumn("event_time", col("timestamp").cast(TimestampType()))
+
+    windowed = df_with_time \
+        .withWatermark("event_time", "2 minutes") \
+        .groupBy(window(col("event_time"), "2 minutes", "30 seconds")) \
+        .avg("delta_length") \
+        .withColumnRenamed("avg(delta_length)", "avg_delta_length") \
+        .select(
+            col("window.start").alias("window_start"),
+            col("window.end").alias("window_end"),
+            col("avg_delta_length")
+        )
+
+    def write_batch(batch_df, batch_id):
+        if not batch_df.isEmpty():
+            batch_df.coalesce(1).write.mode("append").json("output/avg_edit_length")
+
+    query = windowed.writeStream \
+        .outputMode("update") \
+        .foreachBatch(write_batch) \
+        .start()
+    
+    return query
+
 def main():
     time.sleep(10)
     parser = argparse.ArgumentParser(
@@ -71,6 +145,11 @@ def main():
     parser.add_argument('-s', '--server-counts', action='store_true')
     parser.add_argument('-a', '--capture-all', action='store_true')
     parser.add_argument('-e', '--edits-per-minute', action='store_true')
+    parser.add_argument('-t', '--edits-by-type', action='store_true')
+    parser.add_argument('-u', '--user-counts', action='store_true')
+    parser.add_argument('-d', '--avg-edit-length-change', action='store_true')
+
+    parser.add_argument('--test', action='store_true')
 
     parser.add_argument('-l', '--limit', type=int)
     args = parser.parse_args()
@@ -108,7 +187,11 @@ def main():
         StructField("minor", BooleanType(), True),
         StructField("patrolled", BooleanType(), True),
         StructField("server_name", StringType(), True),
-        StructField("wiki", StringType(), True)
+        StructField("wiki", StringType(), True),
+        StructField("length", StructType([
+            StructField("old", IntegerType(), True),
+            StructField("new", IntegerType(), True)
+        ]), True),
     ])
     
     kafka_servers = os.environ.get('KAFKA_SERVERS', 'localhost:9092')
@@ -139,6 +222,12 @@ def main():
         queries.append(capture_all(parsed_wikimedia))
     if args.edits_per_minute:
         queries.append(edits_per_minute(parsed_wikimedia))
+    if args.edits_by_type:
+        queries.append(edits_by_type(parsed_wikimedia))
+    if args.user_counts:
+        queries.append(user_counts_per_minute (parsed_wikimedia))
+    if args.avg_edit_length_change:
+        queries.append(avg_edit_length_change(parsed_wikimedia))
     
     if args.limit:
         time.sleep(60)
