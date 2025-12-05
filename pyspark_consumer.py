@@ -7,10 +7,13 @@ from pyspark.sql.types import StructType, StructField, StringType, IntegerType, 
 import argparse
 import time
 
-def server_counts(df):
+def server_counts(df, test_mode=False):
     """Group data by servers and order by most edits."""
 
     counts = df.groupBy("server_name").count().orderBy("count", ascending=False)
+
+    if test_mode:
+        return counts
     
     def write_counts(batch_df, batch_id):
         if not batch_df.isEmpty():
@@ -34,7 +37,7 @@ def capture_all(df):
     
     return query
 
-def edits_per_minute(df):
+def edits_per_minute(df, test_mode=False):
     """Tumbling window query. Find edits per minute on wikipedia servers, excluding bots."""
     df_with_time = df.withColumn(
         "event_time", 
@@ -53,6 +56,9 @@ def edits_per_minute(df):
             col("count").alias("edits_per_minute")
         )
     
+    if test_mode:
+        return windowed
+    
     def write_batch(batch_df, batch_id):
         if not batch_df.isEmpty():
             batch_df.write.mode("append").json("output/edits_per_minute")
@@ -65,10 +71,13 @@ def edits_per_minute(df):
     
     return query
 
-def edits_by_type(df):
+def edits_by_type(df, test_mode=False):
     """Groups changes by type (edit, new, log, etc.)."""
     df_filtered = df.filter(col("bot") == False)
     counts = df_filtered.groupBy("type").count().orderBy(col("count").desc())
+
+    if test_mode:
+        return counts
 
     def write_batch(batch_df, batch_id):
         if not batch_df.isEmpty():
@@ -81,7 +90,7 @@ def edits_by_type(df):
     
     return query
 
-def user_counts_per_minute(df):
+def user_counts_per_minute(df, test_mode=False):
     """Counts user activities per minute, excluding bots and null users."""
     df_with_time = df.filter((col("bot") == False) & (col("user").isNotNull())) \
                      .withColumn("event_time", col("timestamp").cast(TimestampType()))
@@ -96,20 +105,22 @@ def user_counts_per_minute(df):
                                 "user",
                                 "activity_count"
                             )
+    windowed_sorted = windowed.orderBy(col("activity_count").desc())
+    if test_mode:
+        return windowed_sorted
 
     def write_batch(batch_df, batch_id):
         if not batch_df.isEmpty():
-            batch_df_sorted = batch_df.orderBy(col("user_count").desc())
-            batch_df_sorted.coalesce(1).write.mode("append").json("output/user_counts")
+            batch_df.coalesce(1).write.mode("append").json("output/user_counts")
     
-    query = windowed.writeStream \
+    query = windowed_sorted.writeStream \
                     .outputMode("update") \
                     .foreachBatch(write_batch) \
                     .start()
     
     return query
 
-def avg_edit_length_change(df):
+def avg_edit_length_change(df, test_mode=False):
     """Calculates average edit length change over sliding windows."""
     df_edits = df.filter((col("type") == "edit") & (col("length").isNotNull()))
     df_edits = df_edits.withColumn("delta_length", col("length.new") - col("length.old"))
@@ -125,6 +136,9 @@ def avg_edit_length_change(df):
             col("window.end").alias("window_end"),
             col("avg_delta_length")
         )
+    
+    if test_mode:
+        return windowed
 
     def write_batch(batch_df, batch_id):
         if not batch_df.isEmpty():
@@ -155,7 +169,7 @@ def main():
     args = parser.parse_args()
 
     spark = SparkSession.builder.appName("SSEKafka").config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1").getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setLogLevel("WARN")  
 
     kafka_schema = StructType([
         StructField("data", StringType(), True),
@@ -193,40 +207,55 @@ def main():
             StructField("new", IntegerType(), True)
         ]), True),
     ])
-    
-    kafka_servers = os.environ.get('KAFKA_SERVERS', 'localhost:9092')
 
-    df = spark \
-        .readStream \
-        .format("kafka") \
-        .option("kafka.bootstrap.servers", kafka_servers) \
-        .option("subscribe", "sse-topic") \
-        .option("startingOffsets", "earliest") \
-        .load()
+    if args.test:
+        # test mode - read from local file
+        test_file = os.environ.get("TEST_JSON", "tests/testing_data.json")
+        df = spark.read.json(test_file)
+    else: 
+        kafka_servers = os.environ.get('KAFKA_SERVERS', 'localhost:9092')
 
-    # extract the 'data' field
-    parsed_kafka = df.select(
-        from_json(col("value").cast("string"), kafka_schema).alias("kafka_event")
-    ).select("kafka_event.data")
+        df = spark \
+            .readStream \
+            .format("kafka") \
+            .option("kafka.bootstrap.servers", kafka_servers) \
+            .option("subscribe", "sse-topic") \
+            .option("startingOffsets", "earliest") \
+            .load()
 
-    # parse the Wikimedia JSON inside the data field
-    parsed_wikimedia = parsed_kafka.select(
-        from_json(col("data"), wikimedia_schema).alias("event")
-    ).select("event.*")
+        # extract the 'data' field
+        parsed_kafka = df.select(
+            from_json(col("value").cast("string"), kafka_schema).alias("kafka_event")
+        ).select("kafka_event.data")
+
+        # parse the Wikimedia JSON inside the data field
+        parsed_wikimedia = parsed_kafka.select(
+            from_json(col("data"), wikimedia_schema).alias("event")
+        ).select("event.*")
 
     queries = []
 
     if args.server_counts:
+        if args.test:
+            return server_counts(df, test_mode=True)    
         queries.append(server_counts(parsed_wikimedia))
     if args.capture_all:
         queries.append(capture_all(parsed_wikimedia))
     if args.edits_per_minute:
+        if args.test:
+            return edits_per_minute(df, test_mode=True)
         queries.append(edits_per_minute(parsed_wikimedia))
     if args.edits_by_type:
+        if args.test:
+            return edits_by_type(df, test_mode=True)
         queries.append(edits_by_type(parsed_wikimedia))
     if args.user_counts:
-        queries.append(user_counts_per_minute (parsed_wikimedia))
+        if args.test:
+            return user_counts_per_minute(df, test_mode=True)
+        queries.append(user_counts_per_minute(parsed_wikimedia))
     if args.avg_edit_length_change:
+        if args.test:
+            return avg_edit_length_change(df, test_mode=True)
         queries.append(avg_edit_length_change(parsed_wikimedia))
     
     if args.limit:
