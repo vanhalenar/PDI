@@ -12,7 +12,7 @@ def server_counts(df):
     
     def write_counts(batch_df, batch_id):
         if not batch_df.isEmpty():
-            batch_df.coalesce(1).write.mode("overwrite").json("output/final_server_counts")
+            batch_df.coalesce(1).write.mode("overwrite").json("output/server_counts")
     
     query = counts.writeStream \
         .outputMode("complete") \

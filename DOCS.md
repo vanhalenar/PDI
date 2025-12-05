@@ -37,6 +37,33 @@ Na Kafku je napojený konzument dát `pyspark_consumer.py`, ktorý číta prúd 
 
 Dáta sú ukladané do JSON súborov za využitia funkcionality Apache Spark `writeStream`. Zapisované sú dáta aj checkpointy.
 
-## Ukážky behu programu
+## Spustenie
 
-Postup spúšťania aplikácie je v súbore `INSTALL.md`. Ukážky behu a popis offline testov, sú v súbore `TESTING.md`.
+Podrobný postup spúšťania aplikácie je v súbore `INSTALL.md`. Pri spustení pomocou `docker-compose up` sú vytvorené Kafka broker, producer, a Spark consumer. Ako východzí dotaz je `--server-counts` a `--limit` je `30`, čo znamená, že stream je spracovávaný 30 sekúnd, a potom skončí. Po dobehnutí je možné spustiť ďalšie dotazy v novom terminálovom okne za použitia `docker-compose run consumer [ARGS]`, kde je možné zadať ľubovoľné kombinácie dotazov a špecifikovať limit. Pri nešpecifikovanom limite bude dotaz bežať až do prerušenia. 
+
+Priebeh Spark úloh je možné sledovať vo webovom UI na `localhost:4040`.
+
+## Príklady spustenia aplikácie
+
+Prerekvizita:
+```
+$ docker-compose up
+```
+
+Spustenie dotazu `edits-per-minute` bez časového obmedzenia:
+```
+$ docker-compose run composer --edits-per-minute
+```
+Výsledky sú v `consumer_output/edits-per-minute`.
+
+Spustenie dotazu `server-counts` na 60 sekúnd:
+```
+$ docker-compose run composer --server-counts --limit 60
+```
+Výsledky sú v `consumer_output/server-counts`.
+
+Spustenie `server-counts` a `edits-per-minute` na 60 sekúnd naraz:
+```
+$ docker-compose run composer --server-counts ---edits-per-minute --limit 60
+```
+Výsledky sú v `consumer_output/edits-per-minute` a `consumer_output/server-counts`.
