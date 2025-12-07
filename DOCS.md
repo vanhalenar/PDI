@@ -1,5 +1,7 @@
 # VUT FIT - PDI 25/26
 
+### Timotej Halenár, Lucie Jadrná
+
 # Apache Spark Structured Streaming
 
 # Projektová dokumentácia
@@ -63,7 +65,7 @@ $ docker-compose up
 Spustenie dotazu `edits-per-minute` bez časového obmedzenia:
 
 ```
-$ docker-compose run composer --edits-per-minute
+$ docker-compose run consumer --edits-per-minute
 ```
 
 Výsledky sú v `consumer_output/edits-per-minute`.
@@ -71,7 +73,7 @@ Výsledky sú v `consumer_output/edits-per-minute`.
 Spustenie dotazu `server-counts` na 60 sekúnd:
 
 ```
-$ docker-compose run composer --server-counts --limit 60
+$ docker-compose run consumer --server-counts --limit 60
 ```
 
 Výsledky sú v `consumer_output/server-counts`.
@@ -79,7 +81,7 @@ Výsledky sú v `consumer_output/server-counts`.
 Spustenie `server-counts` a `edits-per-minute` na 60 sekúnd naraz:
 
 ```
-$ docker-compose run composer --server-counts ---edits-per-minute --limit 60
+$ docker-compose run consumer --server-counts ---edits-per-minute --limit 60
 ```
 
 Výsledky sú v `consumer_output/edits-per-minute` a `consumer_output/server-counts`.
